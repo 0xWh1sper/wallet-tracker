@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wallet Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f6f8; --surface: #ffffff; --surface-2: #f9fafb; --text: #0f172a; --muted: #64748b; --faint: #94a3b8;
+    --border: #e6e8ec; --accent: #059669; --accent-soft: #ecfdf5; --accent-text: #047857;
+    --warn: #b45309; --warn-soft: #fffbeb; --err: #dc2626; --err-soft: #fef2f2;
+    --shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 1px 3px rgba(15, 23, 42, .06);
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0d12; --surface: #12151c; --surface-2: #171b24; --text: #e7eaf0; --muted: #8b95a7; --faint: #5b6577;
+      --border: #232835; --accent: #10b981; --accent-soft: #0f2a22; --accent-text: #34d399;
+      --warn: #f59e0b; --warn-soft: #2a2010; --err: #f87171; --err-soft: #2a1515;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased;
+         font: 14px/1.5 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  svg { display: block; }
+  main { max-width: 1120px; margin: 0 auto; padding: 0 16px 64px; }
+
+  /* Header */
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 28px 0 24px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .logo { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
+          background: linear-gradient(135deg, #10b981, #047857); color: #fff; box-shadow: var(--shadow); }
+  .brand h1 { font-size: 18px; font-weight: 700; margin: 0; letter-spacing: -.01em; }
+  .brand p { margin: 0; color: var(--muted); font-size: 13px; }
+  .controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 999px;
+          background: var(--surface); border: 1px solid var(--border); font-size: 13px; color: var(--muted);
+          font-variant-numeric: tabular-nums; box-shadow: var(--shadow); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); position: relative; }
+  .dot.live { background: var(--accent); }
+  .dot.live::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; background: var(--accent);
+                     opacity: .35; animation: pulse 2s ease-out infinite; }
+  .dot.busy { background: var(--warn); }
+  .dot.err { background: var(--err); }
+  @keyframes pulse { from { transform: scale(.6); opacity: .5; } to { transform: scale(1.6); opacity: 0; } }
+  .seg { display: inline-flex; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 3px; box-shadow: var(--shadow); }
+  .seg button { border: 0; background: none; padding: 4px 10px; border-radius: 6px; font-size: 13px; color: var(--muted); cursor: pointer; font-weight: 500; }
+  .seg button.on { background: var(--surface-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
+  .btn { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px; border-radius: 9px; border: 0;
+         background: var(--accent); color: #fff; font-weight: 600; font-size: 13px; cursor: pointer; box-shadow: var(--shadow); }
+  .btn:hover { filter: brightness(1.06); }
+  .btn:disabled { opacity: .6; cursor: default; }
+  .btn:disabled svg { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Stats */
+  .stats { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); }
+  .stat { padding: 18px 20px; min-width: 0; }
+  .stat .label { color: var(--muted); font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: .04em; }
+  .stat .value { font-size: 26px; font-weight: 700; letter-spacing: -.02em; margin-top: 6px; font-variant-numeric: tabular-nums;
+                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stat .value small { font-size: 14px; font-weight: 600; color: var(--muted); margin-left: 4px; }
+  .stat.primary .value { font-size: 32px; color: var(--accent-text); }
+  .stat .sub { color: var(--faint); font-size: 12px; margin-top: 4px; }
+  .bar { height: 6px; background: var(--surface-2); border-radius: 99px; margin-top: 12px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--border); }
+  .bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width .4s; }
+
+  /* Address editor */
+  details.card { margin-bottom: 16px; }
+  details summary { list-style: none; cursor: pointer; padding: 14px 20px; display: flex; align-items: center; gap: 10px; font-weight: 600; }
+  details summary::-webkit-details-marker { display: none; }
+  details summary .chev { transition: transform .2s; color: var(--muted); }
+  details[open] summary .chev { transform: rotate(90deg); }
+  details summary .count { color: var(--muted); font-weight: 500; }
+  .editor { padding: 0 20px 18px; }
+  textarea { width: 100%; height: 140px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; resize: vertical;
+             background: var(--surface-2); font-family: var(--mono); font-size: 12px; line-height: 1.6; outline: none; }
+  textarea:focus, .search input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+  /* Table */
+  .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+  .toolbar h2 { font-size: 15px; margin: 0; font-weight: 600; }
+  .toolbar .right { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .search { position: relative; }
+  .search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--faint); }
+  .search input { height: 34px; width: 220px; max-width: 100%; padding: 0 10px 0 32px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-2); outline: none; }
+  .toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
+  .toggle input { appearance: none; width: 32px; height: 18px; border-radius: 99px; background: var(--border); position: relative; cursor: pointer; margin: 0; transition: background .2s; }
+  .toggle input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .2s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+  .toggle input:checked { background: var(--accent); }
+  .toggle input:checked::after { transform: translateX(14px); }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 12px; font-weight: 500; color: var(--muted); padding: 10px 20px; background: var(--surface-2);
+       border-bottom: 1px solid var(--border); white-space: nowrap; user-select: none; }
+  th.sortable { cursor: pointer; }
+  th.sortable:hover { color: var(--text); }
+  th .arrow { opacity: .4; margin-left: 4px; }
+  th.sorted .arrow { opacity: 1; color: var(--accent-text); }
+  td { padding: 12px 20px; border-bottom: 1px solid var(--border); white-space: nowrap; vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover td { background: var(--surface-2); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .idx { display: inline-grid; place-items: center; min-width: 28px; height: 22px; padding: 0 6px; border-radius: 6px;
+         background: var(--surface-2); border: 1px solid var(--border); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .addr { display: flex; align-items: center; gap: 6px; }
+  .addr code { font-family: var(--mono); font-size: 13px; }
+  .icon-btn { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; border: 0; background: none;
+              color: var(--faint); cursor: pointer; text-decoration: none; }
+  .icon-btn:hover { background: var(--border); color: var(--text); }
+  .icon-btn.ok { color: var(--accent); }
+  .amt { font-weight: 600; }
+  .amt.zero { color: var(--faint); font-weight: 400; }
+  .delta { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 5px; font-size: 11px; font-weight: 600;
+           background: var(--accent-soft); color: var(--accent-text); }
+  .badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 99px; font-size: 12px; font-weight: 500; }
+  .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .badge.funded { background: var(--accent-soft); color: var(--accent-text); }
+  .badge.warn { background: var(--warn-soft); color: var(--warn); }
+  .badge.err { background: var(--err-soft); color: var(--err); }
+  .badge.empty { color: var(--faint); padding-left: 0; }
+  .skeleton { display: inline-block; height: 10px; width: 64px; border-radius: 4px; vertical-align: middle;
+              background: linear-gradient(90deg, var(--surface-2), var(--border), var(--surface-2)); background-size: 200% 100%; animation: shimmer 1.2s infinite; }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+  .empty-state { padding: 48px 20px; text-align: center; color: var(--muted); }
+  footer { margin-top: 20px; text-align: center; color: var(--faint); font-size: 12px; }
+
+  /* Toasts */
+  .toasts { position: fixed; right: 16px; bottom: 16px; display: grid; gap: 8px; z-index: 10; }
+  .toast { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 10px;
+           padding: 12px 14px; box-shadow: 0 8px 24px rgba(0,0,0,.12); font-size: 13px; animation: slide .25s ease-out; max-width: 340px; }
+  .toast b { color: var(--accent-text); }
+  .toast code { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  @keyframes slide { from { transform: translateY(8px); opacity: 0; } }
+
+  @media (max-width: 860px) { .stats { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 520px) {
+    .stats { grid-template-columns: 1fr; }
+    .search input { width: 160px; }
+    th, td { padding-left: 12px; padding-right: 12px; }
+    .addr code { font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="brand">
+      <div class="logo">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V8H6a2 2 0 0 1 0-4h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>
+      </div>
+      <div>
+        <h1>Wallet Monitor</h1>
+        <p>TRON network · USDT TRC-20</p>
+      </div>
+    </div>
+    <div class="controls">
+      <span class="pill"><span class="dot" id="dot"></span><span id="statusText">Idle</span></span>
+      <div class="seg" id="interval" role="group" aria-label="Auto-refresh">
+        <button data-v="0">Off</button><button data-v="60">1 min</button><button data-v="300">5 min</button>
+      </div>
+      <button class="btn" id="refresh">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+        Refresh
+      </button>
+    </div>
+  </header>
+
+  <section class="stats">
+    <div class="card stat primary">
+      <div class="label">Total USDT</div>
+      <div class="value" id="totUsdt">—</div>
+      <div class="sub" id="totUsdtSub">&nbsp;</div>
+    </div>
+    <div class="card stat">
+      <div class="label">Total TRX</div>
+      <div class="value" id="totTrx">—</div>
+      <div class="sub">For energy / fees</div>
+    </div>
+    <div class="card stat">
+      <div class="label">Funded</div>
+      <div class="value" id="funded">—</div>
+      <div class="bar"><i id="fundedBar" style="width:0"></i></div>
+    </div>
+    <div class="card stat">
+      <div class="label">Last updated</div>
+      <div class="value" id="updated">—</div>
+      <div class="sub" id="updatedSub">&nbsp;</div>
+    </div>
+  </section>
+
+  <details class="card" id="editorBox">
+    <summary>
+      <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      Addresses <span class="count" id="addrCount"></span>
+    </summary>
+    <div class="editor">
+      <textarea id="addrs" spellcheck="false" placeholder="Paste TRON addresses, one per line — or paste a whole CSV; every T… address is picked up."></textarea>
+      <div class="hint">Saved in this browser only. Balances are read from public TRON nodes — no keys involved.</div>
+    </div>
+  </details>
+
+  <section class="card">
+    <div class="toolbar">
+      <h2>Balances</h2>
+      <div class="right">
+        <label class="search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="search" placeholder="Search address or #" autocomplete="off">
+        </label>
+        <label class="toggle"><input type="checkbox" id="fundedOnly"> Funded only</label>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th class="sortable" data-sort="idx"># <span class="arrow">↕</span></th>
+          <th>Address</th>
+          <th class="sortable num" data-sort="usdt">USDT <span class="arrow">↕</span></th>
+          <th class="sortable num" data-sort="trx">TRX <span class="arrow">↕</span></th>
+          <th>Status</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>Data via PublicNode / TronGrid JSON-RPC · Auto-refresh runs only while this page is open</footer>
+</main>
+<div class="toasts" id="toasts"></div>
+
+<script>
+// USDT TRC-20 contract (TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t) in hex form.
+const USDT_HEX = "0xa614f803b6fd780986a42c78ec9c7f77e6ded13c";
+// Public TRON JSON-RPC nodes; the first that answers wins. Both accept batched calls.
+const RPCS = ["https://tron-rpc.publicnode.com/jsonrpc", "https://api.trongrid.io/jsonrpc"];
+const BATCH = 50;   // addresses per request (2 calls each)
+const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+const ADDR_RE = /T[1-9A-HJ-NP-Za-km-z]{33}/g;
+const $ = id => document.getElementById(id);
+
+const ICON_COPY = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+const ICON_CHECK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+const ICON_EXT = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>';
+
+const store = {
+  get(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+
+const state = {
+  results: {},        // address -> {usdt, trx, error, delta}
+  running: false, lastChecked: 0, errors: 0, nextAt: 0, timer: null,
+  interval: Number(store.get("tron.interval", "300")),
+  sort: { key: "idx", dir: 1 },
+};
+
+const fmt = (n, d = 2) => n.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const addresses = () => [...new Set($("addrs").value.match(ADDR_RE) || [])];
+
+// Base58check TRON address -> 20-byte hex (drops the 0x41 prefix and checksum).
+function toHex(addr) {
+  let n = 0n;
+  for (const c of addr) n = n * 58n + BigInt(B58.indexOf(c));
+  return n.toString(16).padStart(50, "0").slice(2, 42);
+}
+
+async function rpcBatch(calls) {
+  let lastErr;
+  for (const url of RPCS) {
+    for (let i = 0; i < 2; i++) {
+      try {
+        const res = await fetch(url, {
+          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(calls),
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const out = await res.json();
+        if (!Array.isArray(out)) throw new Error("bad response");
+        return Object.fromEntries(out.map(r => [r.id, r]));
+      } catch (e) { lastErr = e; await sleep(1000); }
+    }
+  }
+  throw lastErr;
+}
+
+// One request per BATCH addresses: TRX balance + USDT balanceOf for each.
+async function fetchBalances(list) {
+  const out = {};
+  for (let s = 0; s < list.length; s += BATCH) {
+    const chunk = list.slice(s, s + BATCH);
+    const calls = chunk.flatMap((a, i) => {
+      const h = toHex(a);
+      return [
+        { jsonrpc: "2.0", id: 2 * i, method: "eth_getBalance", params: ["0x" + h, "latest"] },
+        { jsonrpc: "2.0", id: 2 * i + 1, method: "eth_call",
+          params: [{ to: USDT_HEX, data: "0x70a08231" + h.padStart(64, "0") }, "latest"] },
+      ];
+    });
+    try {
+      const res = await rpcBatch(calls);
+      chunk.forEach((a, i) => {
+        const trx = res[2 * i], usdt = res[2 * i + 1];
+        if (!trx || !usdt || trx.error || usdt.error) {
+          out[a] = { error: (trx?.error || usdt?.error)?.message || "no reply" };
+        } else {
+          out[a] = { trx: Number(BigInt(trx.result)) / 1e6, usdt: Number(BigInt(usdt.result || "0x0")) / 1e6 };
+        }
+      });
+    } catch (e) {
+      chunk.forEach(a => out[a] = { error: e.message });
+    }
+  }
+  return out;
+}
+
+async function checkAll() {
+  const list = addresses();
+  if (!list.length || state.running) return;
+  state.running = true;
+  $("refresh").disabled = true;
+  renderStatus();
+  const firstRun = !Object.keys(state.results).length;
+  const fresh = await fetchBalances(list);
+  const deposits = [];
+  for (const a of list) {
+    const prev = state.results[a], r = fresh[a];
+    if (r.error) { state.results[a] = { ...(prev || { usdt: 0, trx: 0 }), error: r.error }; continue; }
+    const delta = prev && !prev.error ? r.usdt - prev.usdt : 0;
+    state.results[a] = { ...r, delta };
+    if (delta > 0 && !firstRun) deposits.push([a, delta]);
+  }
+  state.errors = list.filter(a => state.results[a]?.error).length;
+  state.lastChecked = Date.now();
+  state.running = false;
+  $("refresh").disabled = false;
+  deposits.forEach(([a, d]) => toast(a, d));
+  schedule();
+  render();
+}
+
+function schedule() {
+  clearTimeout(state.timer);
+  state.nextAt = 0;
+  if (!state.interval) return renderStatus();
+  state.nextAt = Date.now() + state.interval * 1000;
+  state.timer = setTimeout(checkAll, state.interval * 1000);
+  renderStatus();
+}
+
+function renderStatus() {
+  const dot = $("dot"), txt = $("statusText");
+  if (state.running) { dot.className = "dot busy"; txt.textContent = "Checking…"; return; }
+  if (state.errors) { dot.className = "dot err"; txt.textContent = `${state.errors} failed`; }
+  else if (state.nextAt) { dot.className = "dot live"; }
+  else { dot.className = "dot"; txt.textContent = state.lastChecked ? "Paused" : "Idle"; }
+  if (state.nextAt) {
+    const s = Math.max(0, Math.round((state.nextAt - Date.now()) / 1000));
+    const t = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+    txt.textContent = (state.errors ? `${state.errors} failed · ` : "Live · next ") + t;
+  }
+  if (state.lastChecked) {
+    const ago = Math.round((Date.now() - state.lastChecked) / 1000);
+    $("updated").textContent = new Date(state.lastChecked).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    $("updatedSub").textContent = ago < 5 ? "just now" : ago < 60 ? `${ago}s ago` : `${Math.floor(ago / 60)}m ago`;
+  }
+}
+
+function render() {
+  const list = addresses();
+  const q = $("search").value.trim().toLowerCase();
+  const fundedOnly = $("fundedOnly").checked;
+  $("addrCount").textContent = `(${list.length})`;
+
+  let totU = 0, totT = 0, funded = 0, newSum = 0;
+  for (const a of list) {
+    const r = state.results[a];
+    if (!r) continue;
+    totU += r.usdt; totT += r.trx;
+    if (r.usdt > 0) funded++;
+    if (r.delta > 0) newSum += r.delta;
+  }
+  const loaded = list.some(a => state.results[a]);
+  $("totUsdt").innerHTML = loaded ? `${fmt(totU)}<small>USDT</small>` : "—";
+  $("totUsdtSub").textContent = newSum > 0 ? `+${fmt(newSum)} since last check` : `Across ${list.length} addresses`;
+  $("totTrx").innerHTML = loaded ? `${fmt(totT)}<small>TRX</small>` : "—";
+  $("totUsdt").title = loaded ? `${fmt(totU, 6)} USDT` : "";
+  $("totTrx").title = loaded ? `${fmt(totT, 6)} TRX` : "";
+  $("funded").innerHTML = loaded ? `${funded}<small>/ ${list.length}</small>` : "—";
+  $("fundedBar").style.width = list.length ? `${(funded / list.length) * 100}%` : "0";
+
+  if (!list.length) {
+    $("rows").innerHTML = `<tr><td colspan="5" class="empty-state">No addresses yet — open <b>Addresses</b> above and paste your list.</td></tr>`;
+    return;
+  }
+
+  let rows = list.map((a, i) => ({ a, i, r: state.results[a] }));
+  if (q) rows = rows.filter(x => x.a.toLowerCase().includes(q) || String(x.i) === q);
+  if (fundedOnly) rows = rows.filter(x => x.r && x.r.usdt > 0);
+  const { key, dir } = state.sort;
+  rows.sort((x, y) => key === "idx" ? (x.i - y.i) * dir : ((x.r?.[key] ?? -1) - (y.r?.[key] ?? -1)) * dir || x.i - y.i);
+
+  $("rows").innerHTML = rows.length ? rows.map(({ a, i, r }) => {
+    const usdt = !r ? '<span class="skeleton"></span>'
+      : `<span class="amt ${r.usdt ? "" : "zero"}">${fmt(r.usdt)}</span>` + (r.delta > 0 ? `<span class="delta">+${fmt(r.delta)}</span>` : "");
+    const trx = !r ? '<span class="skeleton"></span>' : `<span class="amt ${r.trx ? "" : "zero"}">${fmt(r.trx)}</span>`;
+    const badge = !r ? "" : r.error ? `<span class="badge err" title="${r.error}">Error</span>`
+      : r.usdt > 0 && r.trx < 1 ? `<span class="badge warn" title="Holds USDT but has under 1 TRX for fees">Needs TRX</span>`
+      : r.usdt > 0 ? `<span class="badge funded">Funded</span>`
+      : `<span class="badge empty">Empty</span>`;
+    return `<tr>
+      <td><span class="idx">${i}</span></td>
+      <td><div class="addr"><code>${a}</code>
+        <button class="icon-btn" data-copy="${a}" title="Copy address">${ICON_COPY}</button>
+        <a class="icon-btn" href="https://tronscan.org/#/address/${a}" target="_blank" rel="noopener" title="View on Tronscan">${ICON_EXT}</a>
+      </div></td>
+      <td class="num">${usdt}</td><td class="num">${trx}</td><td>${badge}</td></tr>`;
+  }).join("") : `<tr><td colspan="5" class="empty-state">No matching addresses.</td></tr>`;
+
+  document.querySelectorAll("th.sortable").forEach(th => {
+    const on = th.dataset.sort === key;
+    th.classList.toggle("sorted", on);
+    th.querySelector(".arrow").textContent = on ? (dir > 0 ? "↑" : "↓") : "↕";
+  });
+}
+
+function toast(addr, amount) {
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.innerHTML = `New deposit <b>+${fmt(amount)} USDT</b><br><code>${addr}</code>`;
+  $("toasts").appendChild(el);
+  setTimeout(() => el.remove(), 8000);
+}
+
+// Wire up controls.
+$("addrs").value = store.get("tron.addrs", "");
+$("fundedOnly").checked = store.get("tron.fundedOnly", "0") === "1";
+$("editorBox").open = !addresses().length;
+
+const segButtons = [...$("interval").querySelectorAll("button")];
+const paintSeg = () => segButtons.forEach(b => b.classList.toggle("on", Number(b.dataset.v) === state.interval));
+segButtons.forEach(b => b.addEventListener("click", () => {
+  state.interval = Number(b.dataset.v);
+  store.set("tron.interval", String(state.interval));
+  paintSeg(); schedule();
+}));
+paintSeg();
+
+let editTimer;
+$("addrs").addEventListener("input", () => {
+  store.set("tron.addrs", $("addrs").value);
+  render();
+  clearTimeout(editTimer);
+  editTimer = setTimeout(checkAll, 800);   // check newly pasted addresses shortly after typing stops
+});
+$("search").addEventListener("input", render);
+$("fundedOnly").addEventListener("change", () => { store.set("tron.fundedOnly", $("fundedOnly").checked ? "1" : "0"); render(); });
+$("refresh").addEventListener("click", checkAll);
+document.querySelectorAll("th.sortable").forEach(th => th.addEventListener("click", () => {
+  const k = th.dataset.sort;
+  state.sort = state.sort.key === k ? { key: k, dir: -state.sort.dir } : { key: k, dir: k === "idx" ? 1 : -1 };
+  render();
+}));
+$("rows").addEventListener("click", async e => {
+  const btn = e.target.closest("[data-copy]");
+  if (!btn) return;
+  try { await navigator.clipboard.writeText(btn.dataset.copy); } catch { return; }
+  btn.innerHTML = ICON_CHECK; btn.classList.add("ok");
+  setTimeout(() => { btn.innerHTML = ICON_COPY; btn.classList.remove("ok"); }, 1200);
+});
+setInterval(renderStatus, 1000);
+
+render();
+checkAll();   // check on page load
+</script>
+</body>
+</html>
